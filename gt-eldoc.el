@@ -7,6 +7,7 @@
 ;;; Commentary:
 ;; Enable `gt-eldoc-mode' to translate at point using the taker and engines
 ;; of `gt-default-translator', displaying results through ElDoc.
+;; Streaming engines are copied with streaming disabled for these requests.
 
 ;;; Code:
 
@@ -36,8 +37,12 @@
 (defvar gt-eldoc-mode)
 
 (defun gt-eldoc-documentation-function (callback)
-  "Translate at point and pass the result to ElDoc CALLBACK."
-  (when gt-default-translator
+  "Translate at point and pass the completed result to ElDoc CALLBACK.
+Use GT's first preset when `gt-default-translator' is nil.  Streaming
+engines are copied with streaming disabled; the original translator and
+its engines are left unchanged."
+  (let ((template (or gt-default-translator
+                      (cdar (gt-ensure-plain gt-preset-translators)))))
     (condition-case nil
         (let* ((buffer (current-buffer))
                (position (point))
@@ -56,12 +61,25 @@
                                   (= position (point))
                                   (= tick (buffer-chars-modified-tick)))
                          (apply callback args)))))))
-               (translator (clone gt-default-translator :render render)))
+               (engine-source (if (slot-boundp template '_engines)
+                                  (oref template _engines)
+                                (oref template engines)))
+               (engines
+                (lambda ()
+                  (mapcar (lambda (engine)
+                            (if (oref engine stream)
+                                (clone engine :stream nil)
+                              engine))
+                          (ensure-list (gt-ensure-plain engine-source)))))
+               (translator (clone template :render render :engines engines)))
           ;; Translators previously used by `gt-start' retain their initial
           ;; components here; `gt-reset' restores them at the next request.
           (when (slot-boundp translator '_render)
             (oset translator _render render))
-          (gt-start translator)
+          (when (slot-boundp translator '_engines)
+            (oset translator _engines engines))
+          (let (gt-current-translator gt-current-command)
+            (gt-start translator))
           t)
       (user-error nil))))
 
