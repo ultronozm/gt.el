@@ -2,7 +2,24 @@
 ;;; gt-eldoc.el --- Translation results through ElDoc
 
 ;; Copyright (C) 2026 Paul D. Nelson
+;; Author: Paul D. Nelson <ultrono@gmail.com>
+
 ;; SPDX-License-Identifier: GPL-3.0-or-later
+
+;; This program is free software; you can redistribute it and/or modify
+;; it under the terms of the GNU General Public License as published by
+;; the Free Software Foundation, either version 3 of the License, or
+;; (at your option) any later version.
+
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU General Public License for more details.
+
+;; You should have received a copy of the GNU General Public License
+;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+;; This file is NOT part of GNU Emacs.
 
 ;;; Commentary:
 ;; Enable `gt-eldoc-mode' to translate at point using the taker and engines
@@ -19,6 +36,11 @@
   "Pass completed translations to an ElDoc callback.")
 
 (cl-defmethod gt-init :around ((render gt-eldoc-render) translator)
+  ;; Work on initialized tasks, preserving each translator's engine setup.
+  (dolist (task (oref translator tasks))
+    (let ((engine (oref task engine)))
+      (when (oref engine stream)
+        (oset task engine (clone engine :stream nil)))))
   ;; Idle documentation should not announce each request in the echo area.
   (let ((inhibit-message t))
     (cl-call-next-method render translator)))
@@ -30,8 +52,7 @@
                     when (= (plist-get item :state) 2)
                     append (ensure-list (plist-get item :result)))))
       (funcall (oref render callback)
-               (and results (string-join results "\n\n"))
-               :face 'font-lock-doc-face))))
+               (and results (string-join results "\n\n"))))))
 
 (defvar-local gt-eldoc--request nil)
 (defvar gt-eldoc-mode)
@@ -53,31 +74,22 @@ its engines are left unchanged."
                (render
                 (clone (gt-eldoc-render :callback #'ignore)
                  :callback
-                 (lambda (&rest args)
-                   (when (buffer-live-p buffer)
+                 (lambda (text)
+                   (when (and (buffer-live-p buffer)
+                              (eq buffer (window-buffer (selected-window))))
                      (with-current-buffer buffer
                        (when (and gt-eldoc-mode
                                   (eq request gt-eldoc--request)
                                   (= position (point))
                                   (= tick (buffer-chars-modified-tick)))
-                         (apply callback args)))))))
-               (engine-source (if (slot-boundp template '_engines)
-                                  (oref template _engines)
-                                (oref template engines)))
-               (engines
-                (lambda ()
-                  (mapcar (lambda (engine)
-                            (if (oref engine stream)
-                                (clone engine :stream nil)
-                              engine))
-                          (ensure-list (gt-ensure-plain engine-source)))))
-               (translator (clone template :render render :engines engines)))
+                         ;; GT can render again when parallel tasks finish.
+                         (setq gt-eldoc--request nil)
+                         (funcall callback text)))))))
+               (translator (clone template :render render)))
           ;; Translators previously used by `gt-start' retain their initial
           ;; components here; `gt-reset' restores them at the next request.
           (when (slot-boundp translator '_render)
             (oset translator _render render))
-          (when (slot-boundp translator '_engines)
-            (oset translator _engines engines))
           (let (gt-current-translator gt-current-command)
             (gt-start translator))
           t)

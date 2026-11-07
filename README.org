@@ -952,6 +952,6 @@ When the default is nil, GT's first translator preset is used.  ElDoc
 requests complete responses: streaming engines are copied with streaming
 disabled, leaving their configuration for ordinary translation unchanged.
 Asynchronous results are ignored after point moves, the buffer changes,
-or the mode is disabled.
+the source buffer is no longer selected, or the mode is disabled.
 Use a taker that reads text at point without prompting, such as
 =(gt-taker :text 'paragraph :pick nil :prompt nil)=, for idle documentation.
