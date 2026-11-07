@@ -943,3 +943,15 @@ In this way, use your imagination, you can do a lot.
 To enable debug, set =gt-debug-p= to t, then you will see the logs in buffer =*gt-log*=.
 
 Welcome your PRs and sugguestions.
+
+* ElDoc integration
+Load =gt-eldoc= and enable =gt-eldoc-mode= in a buffer to display
+translations through ElDoc.  It uses the taker and engines from
+=gt-default-translator= without replacing that translator's renderer.
+When the default is nil, GT's first translator preset is used.  ElDoc
+requests complete responses: streaming engines are copied with streaming
+disabled, leaving their configuration for ordinary translation unchanged.
+Asynchronous results are ignored after point moves, the buffer changes,
+the source buffer is no longer selected, or the mode is disabled.
+Use a taker that reads text at point without prompting, such as
+=(gt-taker :text 'paragraph :pick nil :prompt nil)=, for idle documentation.
